@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Adaptive Diagnostic Engine</title>
+    <style>
+        body {
+            font-family: Arial;
+            max-width: 600px;
+            margin: 50px auto;
+            line-height: 1.6;
+        }
+
+        .box {
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="box" id="box">
+        <h1>GRE Adaptive Test</h1>
+        <div id="question-container">
+            <button onclick="startTest()">Start Diagnostic</button>
+        </div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        let sessionId = "";
+
+        async function startTest() {
+            const res = await fetch('/start', { method: 'POST' });
+            const data = await res.json();
+            sessionId = data.session_id;
+            renderQuestion(data.question);
+        }
+
+        function renderQuestion(q, feedbackHtml = "") {
+            document.getElementById('question-container').innerHTML = `
+                ${feedbackHtml}
+                <h3>${q.text}</h3>
+                ${q.options.map(opt => `<label><input type="radio" name="ans" value="${opt}"> ${opt}</label><br>`).join('')}
+                <br><button onclick="submitAnswer('${q.id}')">Submit</button>
+                <div id="error-msg" style="color:red; margin-top:10px;"></div>
+            `;
+        }
+
+        async function submitAnswer(qId) {
+            const selectedOpt = document.querySelector('input[name="ans"]:checked');
+            if (!selectedOpt) {
+                document.getElementById('error-msg').innerText = "Please select an answer!";
+                return;
+            }
+            const selected = selectedOpt.value;
+
+            const res = await fetch('/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: sessionId, question_id: qId, answer: selected })
+            });
+            const data = await res.json();
+
+            if (data.study_plan) {
+                document.getElementById('box').innerHTML = `
+                    <h2>Results</h2>
+                    <p><strong>Total Score:</strong> ${data.correct_count} / ${data.total_questions}</p>
+                    <p><strong>Final Ability Score:</strong> ${data.final_score.toFixed(2)}</p>
+                    <pre style="white-space: pre-wrap; font-family: inherit;">${data.study_plan}</pre>
+                `;
+            } else {
+                let feedback = "";
+                if (data.is_correct) {
+                    feedback = `<div style="color: green; font-weight: bold; margin-bottom: 15px;">Correct!</div>`;
+                } else {
+                    feedback = `<div style="color: red; font-weight: bold; margin-bottom: 15px;">Incorrect. The correct answer was: ${data.correct_answer}</div>`;
+                }
+                renderQuestion(data.next_question, feedback);
+            }
+        }
+    </script>
+</body>
+
+</html>
